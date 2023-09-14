@@ -142,9 +142,6 @@ const parseExpression = (expression) => {
     // 数组表达式
     case 'ArrayExpression':
       return parseArrayExpression(expression);
-    // case
-    case 'SwitchCase':
-      return parseSwitchCase(expression);
     // 逗号分隔的表达式
     case 'SequenceExpression':
       return parseSequenceExpression(expression);
@@ -242,14 +239,8 @@ const parseIfStatement = ({ test, consequent, alternate }) => {
     name: 'callIfElse',
     value: [
       parseExpression(test),
-      {
-        type: 'literal',
-        value: parseStatementOrDeclaration(consequent)
-      },
-      {
-        type: 'literal',
-        value: parseStatementOrDeclaration(alternate)
-      }
+      parseStatementOrDeclaration(consequent),
+      parseStatementOrDeclaration(alternate)
     ]
   };
 };
@@ -413,15 +404,9 @@ const parseTryStatement = ({ block, handler, finalizer }) => {
     type: 'call-function',
     name: 'callTryCatch',
     value: [
-      {
-        type: 'literal',
-        value: parseBlockStatement(block)
-      },
+      parseBlockStatement(block),
       parseStatementOrDeclaration(handler),
-      finalizer && {
-        type: 'literal',
-        value: parseBlockStatement(finalizer)
-      }
+      finalizer && parseBlockStatement(finalizer)
     ]
   };
 };
@@ -438,24 +423,14 @@ const parseSwitchStatement = ({ discriminant, cases }) => {
     name: 'callSwitch',
     value: [
       parseExpression(discriminant),
-      {
-        type: 'array-literal',
-        value: cases.map(item => parseSwitchCase(item))
-      }
+      cases.map(({ test, consequent }) => [
+        parseExpression(test),
+        consequent.map(item => parseStatementOrDeclaration(item))
+      ])
     ]
   };
 };
 
-// case 语句
-const parseSwitchCase = ({ test, consequent }) => {
-  return {
-    type: 'array-literal',
-    value: [
-      parseExpression(test),
-      consequent.map(item => parseStatementOrDeclaration(item))
-    ]
-  };
-};
 
 // 序列语句
 const parseSequenceExpression = ({ expressions }) => {
@@ -491,14 +466,8 @@ const parseWhileStatement = ({ test, body }) => {
     type: 'call-function',
     name: 'callWhile',
     value: [
-      {
-        type: 'literal',
-        value: parseExpression(test)
-      },
-      {
-        type: 'literal',
-        value: parseBlockStatement(body)
-      }
+      parseExpression(test),
+      parseBlockStatement(body)
     ]
   };
 };
@@ -509,14 +478,8 @@ const parseDoWhileStatement = ({ test, body }) => {
     type: 'call-function',
     name: 'callDoWhile',
     value: [
-      {
-        type: 'literal',
-        value: parseExpression(test)
-      },
-      {
-        type: 'literal',
-        value: parseBlockStatement(body)
-      }
+      parseExpression(test),
+      parseBlockStatement(body)
     ]
   };
 };
@@ -535,29 +498,12 @@ const parseForStatement = ({ init, test, body, update }) => {
           value: [
             (
               init && init.type === 'VariableDeclaration'
-              ?
-              {
-                type: 'literal',
-                value: parseVariableDeclaration(init)
-              }
-              :
-              {
-                type: 'literal',
-                value: parseExpression(init)
-              }
+                ? parseVariableDeclaration(init)
+                : parseExpression(init)
             ),
-            {
-              type: 'literal',
-              value: parseExpression(test)
-            },
-            {
-              type: 'literal',
-              value: parseExpression(update)
-            },
-            {
-              type: 'literal',
-              value: parseBlockStatement(body, true, true)
-            }
+            parseExpression(test),
+            parseExpression(update),
+            parseBlockStatement(body, true, true)
           ]
         }
       ]
@@ -590,18 +536,9 @@ const parseForInStatement = ({ left, right, body }) => {
           type: 'call-function',
           name: 'callForIn',
           value: [
-            {
-              type: 'literal',
-              value: leftDsl
-            },
-            {
-              type: 'literal',
-              value: parseExpression(right)
-            },
-            {
-              type: 'literal',
-              value: parseStatementOrDeclaration(body)
-            }
+            leftDsl,
+            parseExpression(right),
+            parseStatementOrDeclaration(body)
           ]
         }
       ]
