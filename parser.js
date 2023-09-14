@@ -1,7 +1,8 @@
 // 不需要处理的类型
 const ignoreTypes = [
   'DebuggerStatement',
-  'Directive'
+  'Directive',
+  'EmptyStatement'
 ];
 
 // 报错的类型
@@ -27,6 +28,7 @@ const es5ToDsl = (body) => {
 
 // 语句与声明解析
 const parseStatementOrDeclaration = row => {
+  if (!row) return;
   const { type } = row;
   switch (type) {
     // 变量声明
@@ -66,6 +68,10 @@ const parseStatementOrDeclaration = row => {
       return parseForStatement(row);
     case 'ForInStatement':
       return parseForInStatement(row);
+    case 'BreakStatement':
+      return parseBreakStatement(row);
+    case 'ContinueStatement':
+      return parseContinuteStatement(row);
     default:
       throw new Error(`意料之外的 esTree node: ${type}`);
   }
@@ -79,8 +85,12 @@ const parseExpression = (expression) => {
   // 空值
   if (!expression) return;
   switch (expression.type) {
+    case 'Literal':
+      if (expression.regex) {
+        return parseRegExpLiteral(expression.regex);
+      }
     // 数字字面量
-    case 'NumbericLiteral':
+    case 'NumericLiteral':
     // 字符串字面量
     case 'StringLiteral':
     // 布尔值字面量
@@ -141,6 +151,11 @@ const parseExpression = (expression) => {
     // 对象表达式
     case 'ObjectExpression':
       return parseObjectExpression(expression);
+    // 逻辑表达式
+    case 'LogicalExpression':
+      return parseLogicalExpression(expression);
+    default:
+      throw new Error(`意料之外的 expression 类型：${expression.type}`);
   }
 };
 
@@ -162,13 +177,13 @@ const parseVariableDeclaration = ({ kind, declarations }) => {
 };
 
 // new 语句
-const parseNewExpression = ({ callee }) => {
+const parseNewExpression = ({ callee, arguments }) => {
   return {
     type: 'call-function',
     name: 'newClass',
     value: [
       parseExpression(callee),
-      callee.arguments.map(item => parseExpression(item))
+      arguments.map(item => parseExpression(item))
     ]
   };
 };
@@ -189,7 +204,6 @@ const parseCallExpression = ({ callee, arguments }) => {
 const parseFunctionExpression = ({ id, params, body: { body } }) => {
   return {
     type: 'customize-function',
-    isAsync: false,
     name: id && id.name,
     params: params.map(({ name }) => name),
     body: es5ToDsl(body)
@@ -197,12 +211,13 @@ const parseFunctionExpression = ({ id, params, body: { body } }) => {
 };
 
 // 块级作用域
-const parseBlockStatement = ({ body }) => {
+const parseBlockStatement = (statement, supportBreak = false, supportContinue = false) => {
+  if (!statement) return;
+  const { body } = statement;
   return {
     type: 'call-function',
     name: 'callBlockStatement',
-    isAsync: false,
-    body: es5ToDsl(body)
+    value: [es5ToDsl(body), supportBreak, supportContinue]
   };
 };
 
@@ -227,8 +242,14 @@ const parseIfStatement = ({ test, consequent, alternate }) => {
     name: 'callIfElse',
     value: [
       parseExpression(test),
-      parseStatementOrDeclaration(consequent),
-      parseStatementOrDeclaration(alternate)
+      {
+        type: 'literal',
+        value: parseStatementOrDeclaration(consequent)
+      },
+      {
+        type: 'literal',
+        value: parseStatementOrDeclaration(alternate)
+      }
     ]
   };
 };
@@ -245,12 +266,18 @@ const parseMemberExpression = (expression) => {
     member.push(object.name);
   } else if (object.type === 'MemberExpression') {
     member.push(...parseMemberExpression(object))
-  } else if (computed) {
+  } else if (object.regex) {
+    // acorn
+    member.push(parseRegExpLiteral(object.regex));
+  } else if (object.type === 'RegExpLiteral') {
+    // babel/parse
+    member.push(parseRegExpLiteral(object));
+  } else {
     // 当一个普通表达式处理
     member.push(parseExpression(object));
   }
   // 最后一个成员
-  member.push(property.name);
+  member.push(computed ? parseExpression(property) : property.name);
   return member;
 };
 
@@ -268,7 +295,7 @@ const parseBinaryExpression = ({ left, operator, right }) => {
   return {
     type: 'call-function',
     name: 'callBinary',
-    value: [parseExpression(left), parseExpression(right), operator]
+    value: [parseExpression(left), operator, parseExpression(right)]
   };
 };
 
@@ -276,8 +303,30 @@ const parseBinaryExpression = ({ left, operator, right }) => {
 const parseConditionalExpression = ({ test, consequent, alternate }) => {
   return {
     type: 'call-function',
-    name: 'callIfElse',
-    value: [parseExpression(test), parseExpression(consequent), parseExpression(alternate)]
+    name: 'callConditional',
+    value: [
+      parseExpression(test),
+      {
+        type: 'customize-function',
+        body: [
+          {
+            type: 'call-function',
+            name: 'callReturn',
+            value: [parseExpression(consequent)]
+          }
+        ]
+      },
+      {
+        type: 'customize-function',
+        body: [
+          {
+            type: 'call-function',
+            name: 'callReturn',
+            value: parseExpression(alternate)
+          }
+        ]
+      }
+    ]
   };
 };
 
@@ -287,6 +336,19 @@ const parseRegExpLiteral = ({ pattern, flags }) => {
     type: 'call-function',
     name: 'getRegExp',
     value: [pattern, flags]
+  };
+};
+
+// 逻辑表达式
+const parseLogicalExpression = ({ left, operator, right }) => {
+  return {
+    type: 'call-function',
+    name: 'callLogical',
+    value: [
+      parseExpression(left),
+      operator,
+      parseExpression(right)
+    ]
   };
 };
 
@@ -351,16 +413,22 @@ const parseTryStatement = ({ block, handler, finalizer }) => {
     type: 'call-function',
     name: 'callTryCatch',
     value: [
-      parseBlockStatement(block),
-      parseExpression(handler),
-      parseBlockStatement(finalizer)
+      {
+        type: 'literal',
+        value: parseBlockStatement(block)
+      },
+      parseStatementOrDeclaration(handler),
+      finalizer && {
+        type: 'literal',
+        value: parseBlockStatement(finalizer)
+      }
     ]
   };
 };
 
 // catch 语句
 const parseCatchClause = ({ param, body }) => {
-  return parseFunctionExpression({ params: param, body });
+  return parseFunctionExpression({ params: [param], body });
 };
 
 // switch 语句
@@ -368,7 +436,13 @@ const parseSwitchStatement = ({ discriminant, cases }) => {
   return {
     type: 'call-function',
     name: 'callSwitch',
-    value: [parseExpression(discriminant), cases.map(item => parseSwitchCase(item))]
+    value: [
+      parseExpression(discriminant),
+      {
+        type: 'array-literal',
+        value: cases.map(item => parseSwitchCase(item))
+      }
+    ]
   };
 };
 
@@ -388,7 +462,7 @@ const parseSequenceExpression = ({ expressions }) => {
   return {
     type: 'call-function',
     name: 'callSequence',
-    value: expressions.map(expression => parseExpression(expression))
+    value: [expressions.map(expression => parseExpression(expression))]
   };
 };
 
@@ -398,7 +472,15 @@ const parseObjectExpression = ({ properties }) => {
     type: 'object-literal',
     value: properties.map(({ key, value }) => ({
       key: key.name,
-      value: parseExpression(value)
+      value: (
+        value.type === 'MemberExpression'
+          ? {
+            type: 'call-function',
+            name: 'getValue',
+            value: [parseExpression(value)]
+          }
+          : parseExpression(value)
+      )
     }))
   };
 };
@@ -409,20 +491,32 @@ const parseWhileStatement = ({ test, body }) => {
     type: 'call-function',
     name: 'callWhile',
     value: [
-      parseExpression(test),
-      parseBlockStatement(body)
+      {
+        type: 'literal',
+        value: parseExpression(test)
+      },
+      {
+        type: 'literal',
+        value: parseBlockStatement(body)
+      }
     ]
   };
 };
 
 // DoWhileStatement 语句
-const parseDoWhileStatement = () => {
+const parseDoWhileStatement = ({ test, body }) => {
   return {
     type: 'call-function',
     name: 'callDoWhile',
     value: [
-      parseExpression(test),
-      parseBlockStatement(body)
+      {
+        type: 'literal',
+        value: parseExpression(test)
+      },
+      {
+        type: 'literal',
+        value: parseBlockStatement(body)
+      }
     ]
   };
 };
@@ -433,20 +527,40 @@ const parseForStatement = ({ init, test, body, update }) => {
   return {
     type: 'call-function',
     name: 'callBlockStatement',
-    isAsync: false,
-    body: [
-      {
-        type: 'call-function',
-        name: 'callFor',
-        value: [
-          init && init.type === 'VariableDeclaration'
-            ? parseVariableDeclaration(init)
-            : parseExpression(init),
-          parseExpression(test),
-          parseExpression(update),
-          parseBlockStatement(body)
-        ]
-      }
+    value: [
+      [
+        {
+          type: 'call-function',
+          name: 'callFor',
+          value: [
+            (
+              init && init.type === 'VariableDeclaration'
+              ?
+              {
+                type: 'literal',
+                value: parseVariableDeclaration(init)
+              }
+              :
+              {
+                type: 'literal',
+                value: parseExpression(init)
+              }
+            ),
+            {
+              type: 'literal',
+              value: parseExpression(test)
+            },
+            {
+              type: 'literal',
+              value: parseExpression(update)
+            },
+            {
+              type: 'literal',
+              value: parseBlockStatement(body, true, true)
+            }
+          ]
+        }
+      ]
     ]
   };
 };
@@ -470,24 +584,50 @@ const parseForInStatement = ({ left, right, body }) => {
   return {
     type: 'call-function',
     name: 'callBlockStatement',
-    isAsync: false,
-    body: [
-      {
-        type: 'call-function',
-        name: 'callForIn',
-        value: [
-          leftDsl,
-          parseExpression(right),
-          parseBlockStatement(body)
-        ]
-      }
+    value: [
+      [
+        {
+          type: 'call-function',
+          name: 'callForIn',
+          value: [
+            {
+              type: 'literal',
+              value: leftDsl
+            },
+            {
+              type: 'literal',
+              value: parseExpression(right)
+            },
+            {
+              type: 'literal',
+              value: parseStatementOrDeclaration(body)
+            }
+          ]
+        }
+      ]
     ]
+  };
+};
+
+// break 语句
+const parseBreakStatement = () => {
+  return {
+    type: 'call-function',
+    name: 'callBreak'
+  };
+};
+
+// continue 语句
+const parseContinuteStatement = (statement) => {
+  return {
+    type: 'call-function',
+    name: 'callContinute'
   };
 };
 
 const parser = (es5Tree) => {
   // es5源码体
-  const { body } = es5Tree.program;
+  const { body } = es5Tree.type === 'File' ? es5Tree.program : es5Tree;
   // 解析主体
   return es5ToDsl(body);
 };
