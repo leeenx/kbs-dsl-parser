@@ -1,0 +1,19 @@
+{
+  "name": "kbs-dsl-parser",
+  "version": "1.0.0",
+  "description": "将 es5 转成 KBS 的 DSL.",
+  "main": "index.js",
+  "scripts": {
+    "test": "echo \"Error: no test specified\" && exit 1"
+  },
+  "repository": {
+    "type": "git",
+    "url": "git+https://github.com/leeenx/kbs-dsl-parser.git"
+  },
+  "author": "leeenx",
+  "license": "ISC",
+  "bugs": {
+    "url": "https://github.com/leeenx/kbs-dsl-parser/issues"
+  },
+  "homepage": "https://github.com/leeenx/kbs-dsl-parser#readme"
+}

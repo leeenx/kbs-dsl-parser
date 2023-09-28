@@ -12,6 +12,10 @@ const unSupportTypes = [
   'Patterns'
 ];
 
+let compress = false;
+
+const { getCallFunName, getTypeName, getKeyName } = require('./utils');
+
 const es5ToDsl = (body) => {
   // 检查类型
   body.forEach(({ type }) => {
@@ -97,13 +101,16 @@ const parseExpression = (expression) => {
     case 'BooleanLiteral':
     // null 类型
     case 'NullLiteral':
-      return { type: 'literal', value: expression.value };
+      return {
+        [getKeyName('type', compress)]: getTypeName('literal', compress),
+        [getKeyName('value', compress)]: expression.value
+      };
     // Identifier
     case 'Identifier':
       return {
-        type: 'call-function',
-        name: 'getConst',
-        value: expression.name
+        [getKeyName('type', compress)]: getTypeName('call-function', compress),
+        [getKeyName('name', compress)]: getCallFunName('getConst', compress),
+        [getKeyName('value', compress)]: expression.name
       };
     // 函数表达式
     case 'FunctionExpression':
@@ -123,7 +130,10 @@ const parseExpression = (expression) => {
     // this 指针
     case 'ThisExpression':
       // 当普通字面量返回
-      return { type: 'literal', value: 'this' };
+      return {
+        [getKeyName('type', compress)]: getTypeName('literal', compress),
+        [getKeyName('value', compress)]: 'this'
+      };
     // 一元运算
     case 'UnaryExpression':
       return parseUnaryExpression(expression);
@@ -160,13 +170,13 @@ const parseExpression = (expression) => {
 const parseVariableDeclaration = ({ kind, declarations }) => {
   if (declarations.length > 0) {
     return {
-      type: 'call-function',
-      name: 'batchDeclaration',
-      value: [
+      [getKeyName('type', compress)]: getTypeName('call-function', compress),
+      [getKeyName('name', compress)]: getCallFunName('batchDeclaration', compress),
+      [getKeyName('value', compress)]: [
         kind,
         declarations.map(({ id, init }) => ({
-          key: id.name,
-          value: parseExpression(init)
+          [getKeyName('key', compress)]: id.name,
+          [getKeyName('value', compress)]: parseExpression(init)
         }))
       ]
     };
@@ -176,9 +186,9 @@ const parseVariableDeclaration = ({ kind, declarations }) => {
 // new 语句
 const parseNewExpression = ({ callee, arguments }) => {
   return {
-    type: 'call-function',
-    name: 'newClass',
-    value: [
+    [getKeyName('type', compress)]: getTypeName('call-function', compress),
+    [getKeyName('name', compress)]: getCallFunName('newClass', compress),
+    [getKeyName('value', compress)]: [
       parseExpression(callee),
       arguments.map(item => parseExpression(item))
     ]
@@ -188,9 +198,9 @@ const parseNewExpression = ({ callee, arguments }) => {
 // 调用函数
 const parseCallExpression = ({ callee, arguments }) => {
   return {
-    type: 'call-function',
-    name: 'callFun',
-    value: [
+    [getKeyName('type', compress)]: getTypeName('call-function', compress),
+    [getKeyName('name', compress)]: getCallFunName('callFun', compress),
+    [getKeyName('value', compress)]: [
       parseExpression(callee),
       arguments.map(item => parseExpression(item))
     ]
@@ -199,22 +209,31 @@ const parseCallExpression = ({ callee, arguments }) => {
 
 // 函数声明
 const parseFunctionExpression = ({ id, params, body: { body } }) => {
+  const name = id && id.name;
+  if (name && ignoreFNames.includes(id.name)) {
+    // @babel/runtime/helpers
+    return {
+      [getKeyName('type', compress)]: getTypeName('call-function', compress),
+      [getKeyName('name', compress)]: getCallFunName('getConst', compress),
+      [getKeyName('value', compress)]: name
+    };
+  }
   return {
-    type: 'customize-function',
-    name: id && id.name,
-    params: params.map(({ name }) => name),
-    body: es5ToDsl(body)
+    [getKeyName('type', compress)]: getTypeName('customize-function', compress),
+    [getKeyName('name', compress)]: name,
+    [getKeyName('params', compress)]: params.map(({ name }) => name),
+    [getKeyName('body', compress)]: es5ToDsl(body)
   };
 };
 
 // 块级作用域
 const parseBlockStatement = (statement, supportBreak = false, supportContinue = false) => {
   if (!statement) return;
-  const { body } = statement;
+  const { body = [] } = statement;
   return {
-    type: 'call-function',
-    name: 'callBlockStatement',
-    value: [es5ToDsl(body), supportBreak, supportContinue]
+    [getKeyName('type', compress)]: getTypeName('call-function', compress),
+    [getKeyName('name', compress)]: getCallFunName('callBlockStatement', compress),
+    [getKeyName('value', compress)]: [es5ToDsl(body), supportBreak, supportContinue]
   };
 };
 
@@ -226,18 +245,18 @@ const parseExpressionStatement = ({ expression }) => {
 // 返回语句
 const parseReturnStatement = ({ argument }) => {
   return {
-    type: 'call-function',
-    name: 'callReturn',
-    value: [parseExpression(argument)]
+    [getKeyName('type', compress)]: getTypeName('call-function', compress),
+    [getKeyName('name', compress)]: getCallFunName('callReturn', compress),
+    [getKeyName('value', compress)]: [parseExpression(argument)]
   };
 };
 
 // if...else 语句
 const parseIfStatement = ({ test, consequent, alternate }) => {
   return {
-    type: 'call-function',
-    name: 'callIfElse',
-    value: [
+    [getKeyName('type', compress)]: getTypeName('call-function', compress),
+    [getKeyName('name', compress)]: getCallFunName('callIfElse', compress),
+    [getKeyName('value', compress)]: [
       parseExpression(test),
       parseStatementOrDeclaration(consequent),
       parseStatementOrDeclaration(alternate)
@@ -275,45 +294,45 @@ const parseMemberExpression = (expression) => {
 // 一元运算
 const parseUnaryExpression = ({ operator, argument }) => {
   return {
-    type: 'call-function',
-    name: 'callUnary',
-    value: [operator, parseExpression(argument)]
+    [getKeyName('type', compress)]: getTypeName('call-function', compress),
+    [getKeyName('name', compress)]: getCallFunName('callUnary', compress),
+    [getKeyName('value', compress)]: [operator, parseExpression(argument)]
   };
 };
 
 // 二元运算
 const parseBinaryExpression = ({ left, operator, right }) => {
   return {
-    type: 'call-function',
-    name: 'callBinary',
-    value: [parseExpression(left), operator, parseExpression(right)]
+    [getKeyName('type', compress)]: getTypeName('call-function', compress),
+    [getKeyName('name', compress)]: getCallFunName('callBinary', compress),
+    [getKeyName('value', compress)]: [parseExpression(left), operator, parseExpression(right)]
   };
 };
 
 // 三元运算
 const parseConditionalExpression = ({ test, consequent, alternate }) => {
   return {
-    type: 'call-function',
-    name: 'callConditional',
-    value: [
+    [getKeyName('type', compress)]: getTypeName('call-function', compress),
+    [getKeyName('name', compress)]: getCallFunName('callConditional', compress),
+    [getKeyName('value', compress)]: [
       parseExpression(test),
       {
-        type: 'customize-function',
-        body: [
+        [getKeyName('type', compress)]: getTypeName('customize-function', compress),
+        [getKeyName('body', compress)]: [
           {
-            type: 'call-function',
-            name: 'callReturn',
-            value: [parseExpression(consequent)]
+            [getKeyName('type', compress)]: getTypeName('call-function', compress),
+            [getKeyName('name', compress)]: getCallFunName('callReturn', compress),
+            [getKeyName('value', compress)]: [parseExpression(consequent)]
           }
         ]
       },
       {
-        type: 'customize-function',
-        body: [
+        [getKeyName('type', compress)]: getTypeName('customize-function', compress),
+        [getKeyName('body', compress)]: [
           {
-            type: 'call-function',
-            name: 'callReturn',
-            value: parseExpression(alternate)
+            [getKeyName('type', compress)]: getTypeName('call-function', compress),
+            [getKeyName('name', compress)]: getCallFunName('callReturn', compress),
+            [getKeyName('value', compress)]: parseExpression(alternate)
           }
         ]
       }
@@ -324,18 +343,18 @@ const parseConditionalExpression = ({ test, consequent, alternate }) => {
 // 正则表达式
 const parseRegExpLiteral = ({ pattern, flags }) => {
   return {
-    type: 'call-function',
-    name: 'getRegExp',
-    value: [pattern, flags]
+    [getKeyName('type', compress)]: getTypeName('call-function', compress),
+    [getKeyName('name', compress)]: getCallFunName('getRegExp', compress),
+    [getKeyName('value', compress)]: [pattern, flags]
   };
 };
 
 // 逻辑表达式
 const parseLogicalExpression = ({ left, operator, right }) => {
   return {
-    type: 'call-function',
-    name: 'callLogical',
-    value: [
+    [getKeyName('type', compress)]: getTypeName('call-function', compress),
+    [getKeyName('name', compress)]: getCallFunName('callLogical', compress),
+    [getKeyName('value', compress)]: [
       parseExpression(left),
       operator,
       parseExpression(right)
@@ -348,16 +367,16 @@ const parseAssignmentExpression = ({ left, right }) => {
   if (left.type === 'Identifier') {
     // 变量赋值
     return {
-      type: 'call-function',
-      name: 'assignLet',
-      value: [[left.name], parseExpression(right)]
+      [getKeyName('type', compress)]: getTypeName('call-function', compress),
+      [getKeyName('name', compress)]: getCallFunName('assignLet', compress),
+      [getKeyName('value', compress)]: [[left.name], parseExpression(right)]
     };
   } else if (left.type === 'MemberExpression') {
     // 对象成员
     return {
-      type: 'call-function',
-      name: 'assignLet',
-      value: [parseMemberExpression(left), parseExpression(right)]
+      [getKeyName('type', compress)]: getTypeName('call-function', compress),
+      [getKeyName('name', compress)]: getCallFunName('assignLet', compress),
+      [getKeyName('value', compress)]: [parseMemberExpression(left), parseExpression(right)]
     };
   }
   throw new Error(`Uncaught SyntaxError: Invalid left-hand side in assignment`);
@@ -367,15 +386,15 @@ const parseAssignmentExpression = ({ left, right }) => {
 const parseUpdateExpression = ({ operator, argument, prefix }) => {
   if (argument.type === 'Identifier') {
     return {
-      type: 'call-function',
-      name: 'callUpdate',
-      value: [operator, argument.name, prefix]
+      [getKeyName('type', compress)]: getTypeName('call-function', compress),
+      [getKeyName('name', compress)]: getCallFunName('callUpdate', compress),
+      [getKeyName('value', compress)]: [operator, argument.name, prefix]
     };
   } else if (argument.type === 'MemberExpression') {
     return {
-      type: 'call-function',
-      name: 'callUpdate',
-      value: [operator, parseExpression(expression), prefix]
+      [getKeyName('type', compress)]: getTypeName('call-function', compress),
+      [getKeyName('name', compress)]: getCallFunName('callUpdate', compress),
+      [getKeyName('value', compress)]: [operator, parseExpression(argument), prefix]
     };
   }
   throw new Error(`Uncaught SyntaxError: Invalid left-hand side expression in ${prefix ? 'prefix' : 'postfix'} operation`);
@@ -384,26 +403,26 @@ const parseUpdateExpression = ({ operator, argument, prefix }) => {
 // 数组表达式
 const parseArrayExpression = ({ elements }) => {
   return {
-    type: 'array-literal',
-    value: elements.map(item => parseExpression(item))
+    [getKeyName('type', compress)]: getTypeName('array-literal', compress),
+    [getKeyName('value', compress)]: elements.map(item => parseExpression(item))
   };
 };
 
 // 抛错语句
 const parseThrowStatement = ({ argument }) => {
   return {
-    type: 'call-function',
-    name: 'callThrow',
-    value: parseExpression(argument)
+    [getKeyName('type', compress)]: getTypeName('call-function', compress),
+    [getKeyName('name', compress)]: getCallFunName('callThrow', compress),
+    [getKeyName('value', compress)]: parseExpression(argument)
   };
 };
 
 // try 语句
 const parseTryStatement = ({ block, handler, finalizer }) => {
   return {
-    type: 'call-function',
-    name: 'callTryCatch',
-    value: [
+    [getKeyName('type', compress)]: getTypeName('call-function', compress),
+    [getKeyName('name', compress)]: getCallFunName('callTryCatch', compress),
+    [getKeyName('value', compress)]: [
       parseBlockStatement(block),
       parseStatementOrDeclaration(handler),
       finalizer && parseBlockStatement(finalizer)
@@ -419,9 +438,9 @@ const parseCatchClause = ({ param, body }) => {
 // switch 语句
 const parseSwitchStatement = ({ discriminant, cases }) => {
   return {
-    type: 'call-function',
-    name: 'callSwitch',
-    value: [
+    [getKeyName('type', compress)]: getTypeName('call-function', compress),
+    [getKeyName('name', compress)]: getCallFunName('callSwitch', compress),
+    [getKeyName('value', compress)]: [
       parseExpression(discriminant),
       cases.map(({ test, consequent }) => [
         parseExpression(test),
@@ -435,24 +454,24 @@ const parseSwitchStatement = ({ discriminant, cases }) => {
 // 序列语句
 const parseSequenceExpression = ({ expressions }) => {
   return {
-    type: 'call-function',
-    name: 'callSequence',
-    value: [expressions.map(expression => parseExpression(expression))]
+    [getKeyName('type', compress)]: getTypeName('call-function', compress),
+    [getKeyName('name', compress)]: getCallFunName('callSequence', compress),
+    [getKeyName('value', compress)]: [expressions.map(expression => parseExpression(expression))]
   };
 };
 
 // 对象表达式
 const parseObjectExpression = ({ properties }) => {
   return {
-    type: 'object-literal',
-    value: properties.map(({ key, value }) => ({
-      key: key.name,
-      value: (
+    [getKeyName('type', compress)]: getTypeName('object-literal', compress),
+    [getKeyName('value', compress)]: properties.map(({ key, value }) => ({
+      [getKeyName('key', compress)]: key.name,
+      [getKeyName('value', compress)]: (
         value.type === 'MemberExpression'
           ? {
-            type: 'call-function',
-            name: 'getValue',
-            value: [parseExpression(value)]
+            [getKeyName('type', compress)]: getTypeName('call-function', compress),
+            [getKeyName('name', compress)]: getCallFunName('getValue', compress),
+            [getKeyName('value', compress)]: [parseExpression(value)]
           }
           : parseExpression(value)
       )
@@ -463,9 +482,9 @@ const parseObjectExpression = ({ properties }) => {
 // while 语句
 const parseWhileStatement = ({ test, body }) => {
   return {
-    type: 'call-function',
-    name: 'callWhile',
-    value: [
+    [getKeyName('type', compress)]: getTypeName('call-function', compress),
+    [getKeyName('name', compress)]: getCallFunName('callWhile', compress),
+    [getKeyName('value', compress)]: [
       parseExpression(test),
       parseBlockStatement(body)
     ]
@@ -475,9 +494,9 @@ const parseWhileStatement = ({ test, body }) => {
 // DoWhileStatement 语句
 const parseDoWhileStatement = ({ test, body }) => {
   return {
-    type: 'call-function',
-    name: 'callDoWhile',
-    value: [
+    [getKeyName('type', compress)]: getTypeName('call-function', compress),
+    [getKeyName('name', compress)]: getCallFunName('callDoWhile', compress),
+    [getKeyName('value', compress)]: [
       parseExpression(test),
       parseBlockStatement(body)
     ]
@@ -488,14 +507,14 @@ const parseDoWhileStatement = ({ test, body }) => {
 const parseForStatement = ({ init, test, body, update }) => {
   // for 语句有一个隐藏的作用域，用 blockStatement 来代替
   return {
-    type: 'call-function',
-    name: 'callBlockStatement',
-    value: [
+    [getKeyName('type', compress)]: getTypeName('call-function', compress),
+    [getKeyName('name', compress)]: getCallFunName('callBlockStatement', compress),
+    [getKeyName('value', compress)]: [
       [
         {
-          type: 'call-function',
-          name: 'callFor',
-          value: [
+          [getKeyName('type', compress)]: getTypeName('call-function', compress),
+          [getKeyName('name', compress)]: getCallFunName('callFor', compress),
+          [getKeyName('value', compress)]: [
             (
               init && init.type === 'VariableDeclaration'
                 ? parseVariableDeclaration(init)
@@ -528,14 +547,14 @@ const parseForInStatement = ({ left, right, body }) => {
       throw new Error(`未知的 for...in 初始化类型：${left.type}`);
   }
   return {
-    type: 'call-function',
-    name: 'callBlockStatement',
-    value: [
+    [getKeyName('type', compress)]: getTypeName('call-function', compress),
+    [getKeyName('name', compress)]: getCallFunName('callBlockStatement', compress),
+    [getKeyName('value', compress)]: [
       [
         {
-          type: 'call-function',
-          name: 'callForIn',
-          value: [
+          [getKeyName('type', compress)]: getTypeName('call-function', compress),
+          [getKeyName('name', compress)]: getCallFunName('callForIn', compress),
+          [getKeyName('value', compress)]: [
             leftDsl,
             parseExpression(right),
             parseStatementOrDeclaration(body)
@@ -549,22 +568,62 @@ const parseForInStatement = ({ left, right, body }) => {
 // break 语句
 const parseBreakStatement = () => {
   return {
-    type: 'call-function',
-    name: 'callBreak'
+    [getKeyName('type', compress)]: getTypeName('call-function', compress),
+    [getKeyName('name', compress)]: getCallFunName('callBreak', compress)
   };
 };
 
 // continue 语句
-const parseContinuteStatement = (statement) => {
+const parseContinuteStatement = () => {
   return {
-    type: 'call-function',
-    name: 'callContinute'
+    [getKeyName('type', compress)]: getTypeName('call-function', compress),
+    [getKeyName('name', compress)]: getCallFunName('callContinute', compress)
   };
 };
 
-const parser = (es5Tree) => {
+let ignoreFNames = [
+  '_asyncGenerator',
+  '_asyncGeneratorDelegate',
+  '_asyncIterator',
+  '_asyncToGenerator',
+  '_classCallCheck',
+  '_createClass',
+  '_defaults',
+  '_defineEnumerableProperties',
+  '_defineProperty',
+  '_extends',
+  '_get',
+  '_inherits',
+  '_inheritsLoose',
+  '_instanceof',
+  '_interopRequireDefault',
+  '_interopRequireWildcard',
+  '_jsx',
+  '_newArrowCheck',
+  '_objectDestructuringEmpty',
+  '_objectWithoutProperties',
+  '_possibleConstructorReturn',
+  '_selfGlobal',
+  '_set',
+  '_skipFirstGeneratorNext',
+  '_slicedToArray',
+  '_slicedToArrayLoose',
+  '_taggedTemplateLiteral',
+  '_taggedTemplateLiteralLoose',
+  '_temporalRef',
+  '_temporalUndefined',
+  '_toArray',
+  '_toConsumableArray',
+  '_toPropertyKey',
+  '_typeof'
+];
+
+const dslParse = (es5Tree, isCompress = false, currentIgnoreFNames) => {
+  compress = isCompress;
   // es5源码体
   const { body } = es5Tree.type === 'File' ? es5Tree.program : es5Tree;
   // 解析主体
   return es5ToDsl(body);
 };
+
+module.exports = dslParse;
