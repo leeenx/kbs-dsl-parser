@@ -69,10 +69,10 @@ module.exports = {
   },
   getTypeName: (name, compress = false) => {
     if (!compress || !resolveTypeKeysMap[name]) return name;
-    return !resolveTypeKeysMap[name];
+    return resolveTypeKeysMap[name];
   },
   getKeyName: (name, compress = false) => {
     if (!compress || !dslObjKeyNamesMap[name]) return name;
-    return !dslObjKeyNamesMap[name];
+    return dslObjKeyNamesMap[name];
   }
 };

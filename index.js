@@ -1,27 +1,13 @@
+const { Compilation } = require('webpack');
 class KbsDslParserPlugin {
   constructor({
     compress = false,
     ignoreFNames = []
   } = {}) {
-    super();
     this.compress = compress;
     this.ignoreFNames = ignoreFNames;
   }
   apply(compiler) {
-    compiler.hooks.thisCompilation.tap('KbsDslParserPlugin', (compilation) => {
-      compilation.hooks.processAssets.tap(
-        {
-          name: 'MyPlugin',
-          stage: Compilation.PROCESS_ASSETS_STAGE_ADDITIONAL, // see below for more stages
-        },
-        (assets) => {
-          console.log('List of assets and their sizes:');
-          Object.entries(assets).forEach(([pathname, source]) => {
-            console.log(`— ${pathname}: ${source.size()} bytes`);
-          });
-        }
-      );
-    });
     compiler.hooks.afterCompile.tap('KbsDslParserPlugin', (compilation) => {
       const name = `index.${compilation.hash}`;
       const asset = compilation.assets[`${name}.js`];
