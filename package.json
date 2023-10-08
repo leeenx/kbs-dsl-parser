@@ -16,7 +16,7 @@
     "url": "https://github.com/leeenx/kbs-dsl-parser/issues"
   },
   "homepage": "https://github.com/leeenx/kbs-dsl-parser#readme",
-  "dependencies": {
+  "devDependencies": {
     "ws": "^8.14.2"
   }
 }
