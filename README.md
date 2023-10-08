@@ -118,7 +118,13 @@ module.exports = {
   plugins: [
     new KbsDslParserPlugin({
       compress: process.env.COMPRESS === 'yes', // 是否压缩代码
-      ignoreFNames // 保留的函数名列表：默认为 @babel/runtime/helpers
+      ignoreFNames, // 保留的函数名列表：默认为 @babel/runtime/helpers
+      watch: true // 是否开启监听
+      watchOptions: {
+        protocol: 'ws', // 只有这个选项
+        host: 'localhost', // 如果不想用 localhost 可以传值进去
+        port: 9900 // 端口
+      }
     })
   ]
 }
