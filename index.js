@@ -30,11 +30,12 @@ class KbsDslParserPlugin {
       const websocketServer = new WebSocketServer({ port: wsOptions.port });
       console.log('websocket服务创建成功!');
       websocketServer.on('connection', (ws) => {
-        console.log('链接成功');
+        console.log('ws连接成功');
         this.send = (dslJson) => {
-          ws.send(JSON.stringify(dslJson));
+          ws.send(dslJson);
         }
         ws.on('close', () => {
+          console.log('ws断开');
           this.send = () => {};
         });
       });
@@ -53,7 +54,6 @@ class KbsDslParserPlugin {
         this.dslStr = JSON.stringify(dsl);
         const rowSource = new compiler.webpack.sources.RawSource(this.dslStr);
         compilation.emitAsset(`index.${compilation.hash}.dsl.json`, rowSource);
-        
       }
     });
     if (this.watch) {
