@@ -43,18 +43,22 @@ class KbsDslParserPlugin {
   }
   apply(compiler) {
     compiler.hooks.afterCompile.tap('KbsDslParserPlugin', (compilation) => {
-      const name = `index.${compilation.hash}`;
-      const asset = compilation.assets[`${name}.js`];
-      if (asset) {
-        // 找到资源
-        const realAsset = asset._children ? asset._children[1] : asset;
-        const code = realAsset._cachedSource || realAsset._originalSourceAsString;
-        const ast = require("@babel/parser").parse(code);
-        const dsl = require('./parser')(ast, this.compress, this.ignoreFNames);
-        this.dslStr = JSON.stringify(dsl);
-        const rowSource = new compiler.webpack.sources.RawSource(this.dslStr);
-        compilation.emitAsset(`index.${compilation.hash}.dsl.json`, rowSource);
-      }
+      Object.entries(compilation.assets).forEach(item => {
+        const name = item[0];
+        const asset = item[1];
+        if (!name) return ;
+        const isScript = (/\.js$/.test(name));
+        if (isScript && asset) {
+          // 找到资源
+          const realAsset = asset._children ? asset._children[1] : asset;
+          const code = realAsset._cachedSource || realAsset._originalSourceAsString;
+          const ast = require("@babel/parser").parse(code);
+          const dsl = require('./parser')(ast, this.compress, this.ignoreFNames);
+          this.dslStr = JSON.stringify(dsl);
+          const rowSource = new compiler.webpack.sources.RawSource(this.dslStr);
+          compilation.emitAsset(`${name.replace(/\.js$/, '')}.dsl.json`, rowSource);
+        }
+      });
     });
     if (this.watch) {
       compiler.hooks.done.tap('KbsDslParserPlugin', () => {
