@@ -22,7 +22,9 @@ class KbsDslParserPlugin {
       watch,
       wsOptions,
       isUpdate: false, // 第一次完成编译不是更新
-      send: () => {}
+      send: () => {},
+      jsFileHistory: {},
+      dslStrMap: {}
     });
     if (watch) {
       // 生成 websocket 服务
@@ -46,16 +48,20 @@ class KbsDslParserPlugin {
       Object.entries(compilation.assets).forEach(item => {
         const name = item[0];
         const asset = item[1];
-        if (!name) return ;
         const isScript = (/\.js$/.test(name));
-        if (isScript && asset) {
+        if (!name || !isScript) return ;
+        const entryName = name.replace(/\.[0-9a-z]{20}\.js$/i, '');
+        if (this.jsFileHistory[entryName] === name) return; // 表示已经被标记
+        this.jsFileHistory[entryName] = name;
+        if (asset) {
           // 找到资源
           const realAsset = asset._children ? asset._children[1] : asset;
           const code = realAsset._cachedSource || realAsset._originalSourceAsString;
           const ast = require("@babel/parser").parse(code);
           const dsl = require('./parser')(ast, this.compress, this.ignoreFNames);
-          this.dslStr = JSON.stringify(dsl);
-          const rowSource = new compiler.webpack.sources.RawSource(this.dslStr);
+          const dslStr = JSON.stringify(dsl);
+          this.dslStrMap[entryName] = dslStr;
+          const rowSource = new compiler.webpack.sources.RawSource(dslStr);
           compilation.emitAsset(`${name.replace(/\.js$/, '')}.dsl.json`, rowSource);
         }
       });
@@ -64,10 +70,21 @@ class KbsDslParserPlugin {
       compiler.hooks.done.tap('KbsDslParserPlugin', () => {
         if (this.isUpdate) {
           setTimeout(() => {
-            this.send(this.dslStr);
+            Object.entries(this.dslStrMap).forEach(item => {
+              const entry = item[0];
+              const dslStr = item[1];
+              console.log('更新文件：', entry);
+              this.send(JSON.stringify({
+                entry,
+                dslStr
+              }));
+            });
+            // 清空
+            this.dslStrMap = {};
           }, 0);
         } else {
           this.isUpdate = true;
+          this.dslStrMap = {};
         }
       });
     }

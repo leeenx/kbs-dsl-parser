@@ -1,6 +1,6 @@
 {
   "name": "kbs-dsl-parser",
-  "version": "1.0.11",
+  "version": "1.0.12",
   "description": "将 es5 转成 KBS 的 DSL.",
   "main": "index.js",
   "scripts": {
