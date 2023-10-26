@@ -77,7 +77,8 @@ const parseStatementOrDeclaration = row => {
     case 'ContinueStatement':
       return parseContinuteStatement(row);
     default:
-      throw new Error(`意料之外的 esTree node: ${type}`);
+      // 非不处理类型，需要报错
+      if (!ignoreTypes.includes(type)) throw new Error(`意料之外的 esTree node: ${type}`);
   }
 };
 
@@ -486,7 +487,7 @@ const parseWhileStatement = ({ test, body }) => {
     [getKeyName('name', compress)]: getCallFunName('callWhile', compress),
     [getKeyName('value', compress)]: [
       parseExpression(test),
-      parseBlockStatement(body)
+      parseStatementOrDeclaration(body)
     ]
   };
 };
@@ -498,34 +499,26 @@ const parseDoWhileStatement = ({ test, body }) => {
     [getKeyName('name', compress)]: getCallFunName('callDoWhile', compress),
     [getKeyName('value', compress)]: [
       parseExpression(test),
-      parseBlockStatement(body)
+      parseStatementOrDeclaration(body)
     ]
   };
 };
 
 // for 语句
 const parseForStatement = ({ init, test, body, update }) => {
-  // for 语句有一个隐藏的作用域，用 blockStatement 来代替
+  // for 语句与 for...in 不同，没有隐藏的作用域
   return {
     [getKeyName('type', compress)]: getTypeName('call-function', compress),
-    [getKeyName('name', compress)]: getCallFunName('callBlockStatement', compress),
+    [getKeyName('name', compress)]: getCallFunName('callFor', compress),
     [getKeyName('value', compress)]: [
-      [
-        {
-          [getKeyName('type', compress)]: getTypeName('call-function', compress),
-          [getKeyName('name', compress)]: getCallFunName('callFor', compress),
-          [getKeyName('value', compress)]: [
-            (
-              init && init.type === 'VariableDeclaration'
-                ? parseVariableDeclaration(init)
-                : parseExpression(init)
-            ),
-            parseExpression(test),
-            parseExpression(update),
-            parseBlockStatement(body, true, true)
-          ]
-        }
-      ]
+      (
+        init && init.type === 'VariableDeclaration'
+          ? parseVariableDeclaration(init)
+          : parseExpression(init)
+      ),
+      parseExpression(test),
+      parseExpression(update),
+      parseStatementOrDeclaration(body)
     ]
   };
 };
@@ -546,6 +539,7 @@ const parseForInStatement = ({ left, right, body }) => {
     default:
       throw new Error(`未知的 for...in 初始化类型：${left.type}`);
   }
+  // for...in 语句有一个隐藏的作用域，用 blockStatement 来代替
   return {
     [getKeyName('type', compress)]: getTypeName('call-function', compress),
     [getKeyName('name', compress)]: getCallFunName('callBlockStatement', compress),
