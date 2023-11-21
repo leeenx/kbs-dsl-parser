@@ -8,7 +8,6 @@ const ignoreTypes = [
 // 报错的类型
 const unSupportTypes = [
   'WithStatement',
-  'LabeldStatement',
   'Patterns'
 ];
 
@@ -24,10 +23,24 @@ const es5ToDsl = (body) => {
       throw new Error(`不支持 esTree node: ${type}`);
     }
   });
+  const resolvedModule = [];
   // 逐行解析
-  return body
-    .filter(({ type }) => !ignoreTypes.includes(type))
-    .map(parseStatementOrDeclaration);
+  body
+  .filter(({ type }) => !ignoreTypes.includes(type))
+  .forEach(item => {
+    const { type } = item;
+    const resolvedItem = parseStatementOrDeclaration(item);
+    if (type === 'LabeledStatement') {
+      // 标记语句需要特殊处理
+      resolvedModule.push(...resolvedItem);
+    } else if (type === 'FunctionDeclaration') {
+      // 函数声明需要前置
+      resolvedModule.unshift(resolvedItem);
+    }else {
+      resolvedModule.push(resolvedItem);
+    }
+  });
+  return resolvedModule;
 };
 
 // 语句与声明解析
@@ -76,6 +89,8 @@ const parseStatementOrDeclaration = row => {
       return parseBreakStatement(row);
     case 'ContinueStatement':
       return parseContinuteStatement(row);
+    case 'LabeledStatement':
+      return parseLabeledStatement(row);
     default:
       // 非不处理类型，需要报错
       if (!ignoreTypes.includes(type)) throw new Error(`意料之外的 esTree node: ${type}`);
@@ -130,10 +145,8 @@ const parseExpression = (expression) => {
       return parseMemberExpression(expression);
     // this 指针
     case 'ThisExpression':
-      // 当普通字面量返回
       return {
-        [getKeyName('type', compress)]: getTypeName('literal', compress),
-        [getKeyName('value', compress)]: 'this'
+        [getKeyName('type', compress)]: getTypeName('this', compress)
       };
     // 一元运算
     case 'UnaryExpression':
@@ -317,26 +330,8 @@ const parseConditionalExpression = ({ test, consequent, alternate }) => {
     [getKeyName('name', compress)]: getCallFunName('callConditional', compress),
     [getKeyName('value', compress)]: [
       parseExpression(test),
-      {
-        [getKeyName('type', compress)]: getTypeName('customize-function', compress),
-        [getKeyName('body', compress)]: [
-          {
-            [getKeyName('type', compress)]: getTypeName('call-function', compress),
-            [getKeyName('name', compress)]: getCallFunName('callReturn', compress),
-            [getKeyName('value', compress)]: [parseExpression(consequent)]
-          }
-        ]
-      },
-      {
-        [getKeyName('type', compress)]: getTypeName('customize-function', compress),
-        [getKeyName('body', compress)]: [
-          {
-            [getKeyName('type', compress)]: getTypeName('call-function', compress),
-            [getKeyName('name', compress)]: getCallFunName('callReturn', compress),
-            [getKeyName('value', compress)]: parseExpression(alternate)
-          }
-        ]
-      }
+      parseExpression(consequent),
+      parseExpression(alternate)
     ]
   };
 };
@@ -560,19 +555,38 @@ const parseForInStatement = ({ left, right, body }) => {
 };
 
 // break 语句
-const parseBreakStatement = () => {
+const parseBreakStatement = ({ label }) => {
   return {
     [getKeyName('type', compress)]: getTypeName('call-function', compress),
-    [getKeyName('name', compress)]: getCallFunName('callBreak', compress)
+    [getKeyName('name', compress)]: getCallFunName('callBreak', compress),
+    [getKeyName('value', compress)]: label ? label.name : undefined
   };
 };
 
 // continue 语句
-const parseContinuteStatement = () => {
+const parseContinuteStatement = ({ label }) => {
   return {
     [getKeyName('type', compress)]: getTypeName('call-function', compress),
-    [getKeyName('name', compress)]: getCallFunName('callContinute', compress)
+    [getKeyName('name', compress)]: getCallFunName('callContinute', compress),
+    [getKeyName('value', compress)]: label ? label.name : undefined
   };
+};
+
+// 标记语句
+const parseLabeledStatement = ({ label, body }) => {
+  // 标记语句一分为三
+  return [
+    {
+      [getKeyName('type', compress)]: getTypeName('call-function', compress),
+      [getKeyName('name', compress)]: getCallFunName('addLabel', compress),
+      [getKeyName('value', compress)]: label.name
+    },
+    parseStatementOrDeclaration(body),
+    {
+      [getKeyName('type', compress)]: getTypeName('call-function', compress),
+      [getKeyName('name', compress)]: getCallFunName('removeLabel', compress)
+    }
+  ];
 };
 
 let ignoreFNames = [
