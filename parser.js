@@ -359,20 +359,20 @@ const parseLogicalExpression = ({ left, operator, right }) => {
 };
 
 // 赋值运算
-const parseAssignmentExpression = ({ left, right }) => {
+const parseAssignmentExpression = ({ left, right, operator }) => {
   if (left.type === 'Identifier') {
     // 变量赋值
     return {
       [getKeyName('type', compress)]: getTypeName('call-function', compress),
       [getKeyName('name', compress)]: getCallFunName('assignLet', compress),
-      [getKeyName('value', compress)]: [[left.name], parseExpression(right)]
+      [getKeyName('value', compress)]: [[left.name], parseExpression(right), operator]
     };
   } else if (left.type === 'MemberExpression') {
     // 对象成员
     return {
       [getKeyName('type', compress)]: getTypeName('call-function', compress),
       [getKeyName('name', compress)]: getCallFunName('assignLet', compress),
-      [getKeyName('value', compress)]: [parseMemberExpression(left), parseExpression(right)]
+      [getKeyName('value', compress)]: [parseMemberExpression(left), parseExpression(right), operator]
     };
   }
   throw new Error(`Uncaught SyntaxError: Invalid left-hand side in assignment`);
