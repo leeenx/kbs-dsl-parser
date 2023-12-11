@@ -47,10 +47,12 @@ const resolveFunKeysMap = {
 const resolveTypeKeysMap = {
   'call-function': 'c',
   'customize-function': 'f',
+  'declare-function': 'd',
   component: 'f',
   'array-literal': 'a',
   'object-literal': 'o',
-  literal: 'l'
+  literal: 'l',
+  'prefix-vars': 'p'
 };
 
 const dslObjKeyNamesMap = {

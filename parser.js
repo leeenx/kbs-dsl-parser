@@ -24,39 +24,46 @@ const es5ToDsl = (body) => {
     }
   });
   const resolvedModule = [];
+  // 需要前置的 var 声明变量
+  const prefixVars = [];
   // 逐行解析
   body
   .filter(({ type }) => !ignoreTypes.includes(type))
   .forEach(item => {
     const { type } = item;
-    const resolvedItem = parseStatementOrDeclaration(item);
+    const resolvedItem = parseStatementOrDeclaration(item, prefixVars);
     if (type === 'LabeledStatement') {
       // 标记语句需要特殊处理
       resolvedModule.push(...resolvedItem);
     } else if (type === 'FunctionDeclaration') {
       // 函数声明需要前置
       resolvedModule.unshift(resolvedItem);
-    }else {
+    } else {
       resolvedModule.push(resolvedItem);
     }
+  });
+  // var 声明上升
+  resolvedModule.unshift({
+    [getKeyName('type', compress)]: getTypeName('prefix-vars', compress),
+    [getKeyName('value', compress)]: prefixVars
   });
   return resolvedModule;
 };
 
 // 语句与声明解析
-const parseStatementOrDeclaration = row => {
+const parseStatementOrDeclaration = (row, prefixVars) => {
   if (!row) return;
   const { type } = row;
   switch (type) {
     // 变量声明
     case 'VariableDeclaration':
-      return parseVariableDeclaration(row);
+      return parseVariableDeclaration(row, prefixVars);
     // 块作用域
     case 'BlockStatement':
       return parseBlockStatement(row);
-    // 函数语句
+    // 函数声明
     case 'FunctionDeclaration':
-      return parseFunctionExpression(row);
+      return parseFunctionDeclaration(row);
     // 表达式语句
     case 'ExpressionStatement':
       return parseExpressionStatement(row);
@@ -115,11 +122,15 @@ const parseExpression = (expression) => {
     case 'StringLiteral':
     // 布尔值字面量
     case 'BooleanLiteral':
+      return {
+        [getKeyName('type', compress)]: getTypeName('literal', compress),
+        [getKeyName('value', compress)]: expression.value
+      };
     // null 类型
     case 'NullLiteral':
       return {
         [getKeyName('type', compress)]: getTypeName('literal', compress),
-        [getKeyName('value', compress)]: expression.value
+        [getKeyName('value', compress)]: null
       };
     // Identifier
     case 'Identifier':
@@ -181,17 +192,22 @@ const parseExpression = (expression) => {
 };
 
 // 赋值声明
-const parseVariableDeclaration = ({ kind, declarations }) => {
+const parseVariableDeclaration = ({ kind, declarations }, prefixVars = []) => {
   if (declarations.length > 0) {
     return {
       [getKeyName('type', compress)]: getTypeName('call-function', compress),
       [getKeyName('name', compress)]: getCallFunName('batchDeclaration', compress),
       [getKeyName('value', compress)]: [
         kind,
-        declarations.map(({ id, init }) => ({
-          [getKeyName('key', compress)]: id.name,
-          [getKeyName('value', compress)]: parseExpression(init)
-        }))
+        declarations.map(({ id, init }) => {
+          if (kind === 'var') {
+            prefixVars.push(id.name);
+          }
+          return {
+            [getKeyName('key', compress)]: id.name,
+            [getKeyName('value', compress)]: parseExpression(init)
+          };
+        })
       ]
     };
   }
@@ -221,10 +237,10 @@ const parseCallExpression = ({ callee, arguments }) => {
   };
 };
 
-// 函数声明
-const parseFunctionExpression = ({ id, params, body: { body } }) => {
+// 函数语句
+const parseFunctionExpression = ({ id, params, body: { body } }, isDeclaration) => {
   const name = id && id.name;
-  if (name && ignoreFNames.includes(id.name)) {
+  if (isDeclaration && name && ignoreFNames.includes(id.name)) {
     // @babel/runtime/helpers
     return {
       [getKeyName('type', compress)]: getTypeName('call-function', compress),
@@ -233,12 +249,21 @@ const parseFunctionExpression = ({ id, params, body: { body } }) => {
     };
   }
   return {
-    [getKeyName('type', compress)]: getTypeName('customize-function', compress),
+    [getKeyName('type', compress)]: (
+      isDeclaration ?
+        getTypeName('declare-function', compress) :
+        getTypeName('customize-function', compress)
+    ),
     [getKeyName('name', compress)]: name,
     [getKeyName('params', compress)]: params.map(({ name }) => name),
     [getKeyName('body', compress)]: es5ToDsl(body)
   };
 };
+
+// 函数声明
+const parseFunctionDeclaration = (declaration) => {
+  return parseFunctionExpression(declaration, true);
+}
 
 // 块级作用域
 const parseBlockStatement = (statement, supportBreak = false, supportContinue = false) => {
