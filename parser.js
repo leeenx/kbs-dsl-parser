@@ -15,7 +15,25 @@ let compress = false;
 
 const { getCallFunName, getTypeName, getKeyName } = require('./utils');
 
-const es5ToDsl = (body) => {
+// 「提升的变量」的栈
+const raiseVarStack = [];
+
+// 向栈内添加变量
+const addRaiseVars = (raiseVars, raiseVarStackTail) => {
+  raiseVars.forEach(raiseVar => {
+    if (!raiseVarStackTail.includes(raiseVar)) {
+      raiseVarStackTail.push(raiseVar);
+    }
+  });
+};
+
+const es5ToDsl = (body, scopeBlock = false) => {
+  if (scopeBlock) {
+    // 有作用域块（这里专指函数的作用域）
+    raiseVarStack.push([]);
+  }
+  const lastIndex = raiseVarStack.length - 1;
+  const raiseVarStackTail = raiseVarStack[lastIndex];
   // 检查类型
   body.forEach(({ type }) => {
     if (unSupportTypes.includes(type)) {
@@ -25,13 +43,13 @@ const es5ToDsl = (body) => {
   });
   const resolvedModule = [];
   // 需要前置的 var 声明变量
-  const prefixVars = [];
+  const raiseVars = [];
   // 逐行解析
   body
   .filter(({ type }) => !ignoreTypes.includes(type))
   .forEach(item => {
     const { type } = item;
-    const resolvedItem = parseStatementOrDeclaration(item, prefixVars);
+    const resolvedItem = parseStatementOrDeclaration(item, raiseVars);
     if (type === 'LabeledStatement') {
       // 标记语句需要特殊处理
       resolvedModule.push(...resolvedItem);
@@ -42,22 +60,27 @@ const es5ToDsl = (body) => {
       resolvedModule.push(resolvedItem);
     }
   });
-  // var 声明上升
-  resolvedModule.unshift({
-    [getKeyName('type', compress)]: getTypeName('prefix-vars', compress),
-    [getKeyName('value', compress)]: prefixVars
-  });
+  addRaiseVars(raiseVars, raiseVarStackTail);
+  if (scopeBlock) { // 作用域块（这里专指函数的作用域）
+    // var 声明上升
+    resolvedModule.unshift({
+      [getKeyName('type', compress)]: getTypeName('prefix-vars', compress),
+      [getKeyName('value', compress)]: raiseVarStackTail
+    });
+    // 删除尾节点
+    raiseVarStack.pop();
+  }
   return resolvedModule;
 };
 
 // 语句与声明解析
-const parseStatementOrDeclaration = (row, prefixVars) => {
+const parseStatementOrDeclaration = (row, raiseVars) => {
   if (!row) return;
   const { type } = row;
   switch (type) {
     // 变量声明
     case 'VariableDeclaration':
-      return parseVariableDeclaration(row, prefixVars);
+      return parseVariableDeclaration(row, raiseVars);
     // 块作用域
     case 'BlockStatement':
       return parseBlockStatement(row);
@@ -81,7 +104,7 @@ const parseStatementOrDeclaration = (row, prefixVars) => {
       return parseCatchClause(row);
     // if...else 语句
     case 'IfStatement':
-      return parseIfStatement(row);
+      return parseIfStatement(row, raiseVars);
     case 'SwitchStatement':
       return parseSwitchStatement(row);
     case 'WhileStatement':
@@ -89,7 +112,7 @@ const parseStatementOrDeclaration = (row, prefixVars) => {
     case 'DoWhileStatement':
       return parseDoWhileStatement(row);
     case 'ForStatement':
-      return parseForStatement(row);
+      return parseForStatement(row, raiseVars);
     case 'ForInStatement':
       return parseForInStatement(row);
     case 'BreakStatement':
@@ -192,7 +215,7 @@ const parseExpression = (expression) => {
 };
 
 // 赋值声明
-const parseVariableDeclaration = ({ kind, declarations }, prefixVars = []) => {
+const parseVariableDeclaration = ({ kind, declarations }, raiseVars = []) => {
   if (declarations.length > 0) {
     return {
       [getKeyName('type', compress)]: getTypeName('call-function', compress),
@@ -201,7 +224,7 @@ const parseVariableDeclaration = ({ kind, declarations }, prefixVars = []) => {
         kind,
         declarations.map(({ id, init }) => {
           if (kind === 'var') {
-            prefixVars.push(id.name);
+            raiseVars.push(id.name);
           }
           return {
             [getKeyName('key', compress)]: id.name,
@@ -256,7 +279,7 @@ const parseFunctionExpression = ({ id, params, body: { body } }, isDeclaration) 
     ),
     [getKeyName('name', compress)]: name,
     [getKeyName('params', compress)]: params.map(({ name }) => name),
-    [getKeyName('body', compress)]: es5ToDsl(body)
+    [getKeyName('body', compress)]: es5ToDsl(body, true)
   };
 };
 
@@ -291,14 +314,14 @@ const parseReturnStatement = ({ argument }) => {
 };
 
 // if...else 语句
-const parseIfStatement = ({ test, consequent, alternate }) => {
+const parseIfStatement = ({ test, consequent, alternate }, raiseVars) => {
   return {
     [getKeyName('type', compress)]: getTypeName('call-function', compress),
     [getKeyName('name', compress)]: getCallFunName('callIfElse', compress),
     [getKeyName('value', compress)]: [
       parseExpression(test),
-      parseStatementOrDeclaration(consequent),
-      parseStatementOrDeclaration(alternate)
+      parseStatementOrDeclaration(consequent, raiseVars),
+      parseStatementOrDeclaration(alternate, raiseVars)
     ]
   };
 };
@@ -525,7 +548,7 @@ const parseDoWhileStatement = ({ test, body }) => {
 };
 
 // for 语句
-const parseForStatement = ({ init, test, body, update }) => {
+const parseForStatement = ({ init, test, body, update }, raiseVars) => {
   // for 语句与 for...in 不同，没有隐藏的作用域
   return {
     [getKeyName('type', compress)]: getTypeName('call-function', compress),
@@ -533,7 +556,7 @@ const parseForStatement = ({ init, test, body, update }) => {
     [getKeyName('value', compress)]: [
       (
         init && init.type === 'VariableDeclaration'
-          ? parseVariableDeclaration(init)
+          ? parseVariableDeclaration(init, raiseVars)
           : parseExpression(init)
       ),
       parseExpression(test),
@@ -725,7 +748,7 @@ const dslParse = (es5Tree, isCompress = false, currentIgnoreFNames) => {
   // es5源码体
   const { body } = es5Tree.type === 'File' ? es5Tree.program : es5Tree;
   // 解析主体
-  return es5ToDsl(body);
+  return es5ToDsl(body, true);
 };
 
 module.exports = dslParse;
