@@ -106,15 +106,15 @@ const parseStatementOrDeclaration = (row, raiseVars) => {
     case 'IfStatement':
       return parseIfStatement(row, raiseVars);
     case 'SwitchStatement':
-      return parseSwitchStatement(row);
+      return parseSwitchStatement(row, raiseVars);
     case 'WhileStatement':
-      return parseWhileStatement(row);
+      return parseWhileStatement(row, raiseVars);
     case 'DoWhileStatement':
-      return parseDoWhileStatement(row);
+      return parseDoWhileStatement(row, raiseVars);
     case 'ForStatement':
       return parseForStatement(row, raiseVars);
     case 'ForInStatement':
-      return parseForInStatement(row);
+      return parseForInStatement(row, raiseVars);
     case 'BreakStatement':
       return parseBreakStatement(row);
     case 'ContinueStatement':
@@ -226,10 +226,14 @@ const parseVariableDeclaration = ({ kind, declarations }, raiseVars = []) => {
           if (kind === 'var') {
             raiseVars.push(id.name);
           }
-          return {
-            [getKeyName('key', compress)]: id.name,
-            [getKeyName('value', compress)]: parseExpression(init)
-          };
+          const item = { [getKeyName('key', compress)]: id.name };
+          if (init) {
+            Object.assign(
+              item,
+              { [getKeyName('value', compress)]: parseExpression(init) }
+            );
+          }
+          return item;
         })
       ]
     };
@@ -480,7 +484,7 @@ const parseCatchClause = ({ param, body }) => {
 };
 
 // switch 语句
-const parseSwitchStatement = ({ discriminant, cases }) => {
+const parseSwitchStatement = ({ discriminant, cases }, raiseVars) => {
   return {
     [getKeyName('type', compress)]: getTypeName('call-function', compress),
     [getKeyName('name', compress)]: getCallFunName('callSwitch', compress),
@@ -488,7 +492,7 @@ const parseSwitchStatement = ({ discriminant, cases }) => {
       parseExpression(discriminant),
       cases.map(({ test, consequent }) => [
         parseExpression(test),
-        consequent.map(item => parseStatementOrDeclaration(item))
+        consequent.map(item => parseStatementOrDeclaration(item, raiseVars))
       ])
     ]
   };
@@ -524,25 +528,25 @@ const parseObjectExpression = ({ properties }) => {
 };
 
 // while 语句
-const parseWhileStatement = ({ test, body }) => {
+const parseWhileStatement = ({ test, body }, raiseVars) => {
   return {
     [getKeyName('type', compress)]: getTypeName('call-function', compress),
     [getKeyName('name', compress)]: getCallFunName('callWhile', compress),
     [getKeyName('value', compress)]: [
       parseExpression(test),
-      parseStatementOrDeclaration(body)
+      parseStatementOrDeclaration(body, raiseVars)
     ]
   };
 };
 
 // DoWhileStatement 语句
-const parseDoWhileStatement = ({ test, body }) => {
+const parseDoWhileStatement = ({ test, body }, raiseVars) => {
   return {
     [getKeyName('type', compress)]: getTypeName('call-function', compress),
     [getKeyName('name', compress)]: getCallFunName('callDoWhile', compress),
     [getKeyName('value', compress)]: [
       parseExpression(test),
-      parseStatementOrDeclaration(body)
+      parseStatementOrDeclaration(body, raiseVars)
     ]
   };
 };
@@ -567,7 +571,7 @@ const parseForStatement = ({ init, test, body, update }, raiseVars) => {
 };
 
 // for...in 语句
-const parseForInStatement = ({ left, right, body }) => {
+const parseForInStatement = ({ left, right, body }, raiseVars) => {
   let leftDsl;
   switch (left.type) {
     case 'Identifier':
@@ -594,7 +598,7 @@ const parseForInStatement = ({ left, right, body }) => {
           [getKeyName('value', compress)]: [
             leftDsl,
             parseExpression(right),
-            parseStatementOrDeclaration(body)
+            parseStatementOrDeclaration(body, raiseVars)
           ]
         }
       ]
