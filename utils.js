@@ -52,7 +52,8 @@ const resolveTypeKeysMap = {
   'array-literal': 'a',
   'object-literal': 'o',
   literal: 'l',
-  'prefix-vars': 'p'
+  'prefix-vars': 'p',
+  'member': 'm'
 };
 
 const dslObjKeyNamesMap = {

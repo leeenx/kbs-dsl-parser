@@ -341,7 +341,7 @@ const parseMemberExpression = (expression) => {
   if (object.type === 'Identifier') {
     member.push(object.name);
   } else if (object.type === 'MemberExpression') {
-    member.push(...parseMemberExpression(object))
+    member.push(...parseMemberExpression(object).value)
   } else if (object.regex) {
     // acorn
     member.push(parseRegExpLiteral(object.regex));
@@ -354,7 +354,11 @@ const parseMemberExpression = (expression) => {
   }
   // 最后一个成员
   member.push(computed ? parseExpression(property) : property.name);
-  return member;
+  return {
+    [getKeyName('type', compress)]: getTypeName('member', compress),
+    [getKeyName('value', compress)]: member
+  };
+  // return member;
 };
 
 // 一元运算
