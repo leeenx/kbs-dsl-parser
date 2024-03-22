@@ -1,10 +1,8 @@
 // sort-hand
 const resolveFunKeysMap = {
-  'const': 'co',
   'getValue': 'gV',
   'let': 'l',
   'var': 'v',
-  'batchConst': 'bC',
   'batchLet': 'bL',
   'batchVar': 'bV',
   'batchDeclaration': 'bD',
@@ -53,7 +51,8 @@ const resolveTypeKeysMap = {
   'object-literal': 'o',
   literal: 'l',
   'prefix-vars': 'p',
-  'member': 'm'
+  'member': 'm',
+  'label-statement': 'ls'
 };
 
 const dslObjKeyNamesMap = {

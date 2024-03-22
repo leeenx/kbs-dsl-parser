@@ -50,10 +50,7 @@ const es5ToDsl = (body, scopeBlock = false) => {
   .forEach(item => {
     const { type } = item;
     const resolvedItem = parseStatementOrDeclaration(item, raiseVars);
-    if (type === 'LabeledStatement') {
-      // 标记语句需要特殊处理
-      resolvedModule.push(...resolvedItem);
-    } else if (type === 'FunctionDeclaration') {
+    if (type === 'FunctionDeclaration') {
       // 函数声明需要前置
       resolvedModule.unshift(resolvedItem);
     } else {
@@ -341,7 +338,7 @@ const parseMemberExpression = (expression) => {
   if (object.type === 'Identifier') {
     member.push(object.name);
   } else if (object.type === 'MemberExpression') {
-    member.push(...parseMemberExpression(object).value)
+    member.push(...parseMemberExpression(object))
   } else if (object.regex) {
     // acorn
     member.push(parseRegExpLiteral(object.regex));
@@ -354,11 +351,7 @@ const parseMemberExpression = (expression) => {
   }
   // 最后一个成员
   member.push(computed ? parseExpression(property) : property.name);
-  return {
-    [getKeyName('type', compress)]: getTypeName('member', compress),
-    [getKeyName('value', compress)]: member
-  };
-  // return member;
+  return member;
 };
 
 // 一元运算
@@ -630,19 +623,21 @@ const parseContinuteStatement = ({ label }) => {
 
 // 标记语句
 const parseLabeledStatement = ({ label, body }) => {
-  // 标记语句一分为三
-  return [
-    {
-      [getKeyName('type', compress)]: getTypeName('call-function', compress),
-      [getKeyName('name', compress)]: getCallFunName('addLabel', compress),
-      [getKeyName('value', compress)]: label.name
-    },
-    parseStatementOrDeclaration(body),
-    {
-      [getKeyName('type', compress)]: getTypeName('call-function', compress),
-      [getKeyName('name', compress)]: getCallFunName('removeLabel', compress)
-    }
-  ];
+  return {
+    [getKeyName('type', compress)]: getTypeName('label-statement', compress),
+    [getKeyName('value', compress)]: [
+      {
+        [getKeyName('type', compress)]: getTypeName('call-function', compress),
+        [getKeyName('name', compress)]: getCallFunName('addLabel', compress),
+        [getKeyName('value', compress)]: label.name
+      },
+      parseStatementOrDeclaration(body),
+      {
+        [getKeyName('type', compress)]: getTypeName('call-function', compress),
+        [getKeyName('name', compress)]: getCallFunName('removeLabel', compress)
+      }
+    ]
+  }
 };
 
 let ignoreFNames = [
