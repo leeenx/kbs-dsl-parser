@@ -18,7 +18,7 @@ const resolveFunKeysMap = {
   'setLet': 'sL',
   'callReturn': 'cR',
   'callBreak': 'cBr',
-  'callContinute': 'cCo',
+  'callContinue': 'cCo',
   'callUnary': 'cU',
   'callBinary': 'cB',
   'callUpdate': 'cUp',

@@ -169,7 +169,7 @@ const parseExpression = (expression) => {
     case 'NewExpression':
       return parseNewExpression(expression);
     // 赋值语句
-    case 'AssignmentExpression': 
+    case 'AssignmentExpression':
       return parseAssignmentExpression(expression);
     // MemberExpression
     case 'MemberExpression':
@@ -334,24 +334,28 @@ const parseMemberExpression = (expression) => {
     computed,
     property
   } = expression;
-  const member = [];
+  const memberValue = [];
   if (object.type === 'Identifier') {
-    member.push(object.name);
+    memberValue.push(object.name);
   } else if (object.type === 'MemberExpression') {
-    member.push(...parseMemberExpression(object))
+    const member = parseMemberExpression(object);
+    memberValue.push(...member[getKeyName('type', compress)])
   } else if (object.regex) {
     // acorn
-    member.push(parseRegExpLiteral(object.regex));
+    memberValue.push(parseRegExpLiteral(object.regex));
   } else if (object.type === 'RegExpLiteral') {
     // babel/parse
-    member.push(parseRegExpLiteral(object));
+    memberValue.push(parseRegExpLiteral(object));
   } else {
     // 当一个普通表达式处理
-    member.push(parseExpression(object));
+    memberValue.push(parseExpression(object));
   }
   // 最后一个成员
-  member.push(computed ? parseExpression(property) : property.name);
-  return member;
+  memberValue.push(computed ? parseExpression(property) : property.name);
+  return {
+    [getKeyName('type', compress)]: getTypeName('member', compress),
+    [getKeyName('value', compress)]: memberValue,
+  };
 };
 
 // 一元运算
@@ -616,7 +620,7 @@ const parseBreakStatement = ({ label }) => {
 const parseContinuteStatement = ({ label }) => {
   return {
     [getKeyName('type', compress)]: getTypeName('call-function', compress),
-    [getKeyName('name', compress)]: getCallFunName('callContinute', compress),
+    [getKeyName('name', compress)]: getCallFunName('callContinue', compress),
     [getKeyName('value', compress)]: label ? label.name : undefined
   };
 };
