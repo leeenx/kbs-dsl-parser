@@ -339,7 +339,7 @@ const parseMemberExpression = (expression) => {
     memberValue.push(object.name);
   } else if (object.type === 'MemberExpression') {
     const member = parseMemberExpression(object);
-    memberValue.push(...member[getKeyName('type', compress)])
+    memberValue.push(...member[getKeyName('value', compress)])
   } else if (object.regex) {
     // acorn
     memberValue.push(parseRegExpLiteral(object.regex));
@@ -418,7 +418,7 @@ const parseAssignmentExpression = ({ left, right, operator }) => {
     return {
       [getKeyName('type', compress)]: getTypeName('call-function', compress),
       [getKeyName('name', compress)]: getCallFunName('assignLet', compress),
-      [getKeyName('value', compress)]: [[left.name], parseExpression(right), operator]
+      [getKeyName('value', compress)]: [left.name, parseExpression(right), operator]
     };
   } else if (left.type === 'MemberExpression') {
     // 对象成员
