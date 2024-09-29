@@ -57,12 +57,14 @@ class KbsDslParserPlugin {
           // 找到资源
           const realAsset = asset._children ? asset._children[1] : asset;
           const code = realAsset._cachedSource || realAsset._originalSourceAsString;
-          const ast = require("@babel/parser").parse(code);
-          const dsl = require('./parser')(ast, this.compress, this.ignoreFNames);
-          const dslStr = JSON.stringify(dsl);
-          this.dslStrMap[entryName] = dslStr;
-          const rowSource = new compiler.webpack.sources.RawSource(dslStr);
-          compilation.emitAsset(`${name.replace(/\.js$/, '')}.dsl.json`, rowSource);
+          if (code) {
+            const ast = require("@babel/parser").parse(code);
+            const dsl = require('./parser')(ast, this.compress, this.ignoreFNames);
+            const dslStr = JSON.stringify(dsl);
+            this.dslStrMap[entryName] = dslStr;
+            const rowSource = new compiler.webpack.sources.RawSource(dslStr);
+            compilation.emitAsset(`${name.replace(/\.js$/, '')}.dsl.json`, rowSource);
+          }
         }
       });
     });
