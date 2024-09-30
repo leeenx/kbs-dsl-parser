@@ -13,10 +13,12 @@ class KbsDslParserPlugin {
     compress = false,
     ignoreFNames = [],
     watch = false, // 是否监听
-    watchOptions
+    watchOptions,
+    test = () => true
   } = {}) {
     const wsOptions = Object.assign({}, defaultWatchOptions, watchOptions || {});
     Object.assign(this, {
+      test,
       compress,
       ignoreFNames,
       watch,
@@ -49,7 +51,7 @@ class KbsDslParserPlugin {
         const name = item[0];
         const asset = item[1];
         const isScript = (/\.js$/.test(name));
-        if (!name || !isScript) return ;
+        if (!name || !isScript || !this.test(name)) return ;
         const entryName = name.replace(/\.[0-9a-z]{20}\.js$/i, '');
         if (this.jsFileHistory[entryName] === name) return; // 表示已经被标记
         this.jsFileHistory[entryName] = name;

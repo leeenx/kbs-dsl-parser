@@ -516,7 +516,7 @@ const parseObjectExpression = ({ properties }) => {
     [getKeyName('value', compress)]: properties.map(({ key, value }) => ({
       [getKeyName('key', compress)]: key.type === 'Identifier' ? key.name : key.value,
       [getKeyName('value', compress)]: (
-        value.type === 'MemberExpression'
+        value && value.type === 'MemberExpression'
           ? {
             [getKeyName('type', compress)]: getTypeName('call-function', compress),
             [getKeyName('name', compress)]: getCallFunName('getValue', compress),
