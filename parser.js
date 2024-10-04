@@ -46,17 +46,17 @@ const es5ToDsl = (body, scopeBlock = false) => {
   const raiseVars = [];
   // 逐行解析
   body
-  .filter(({ type }) => !ignoreTypes.includes(type))
-  .forEach(item => {
-    const { type } = item;
-    const resolvedItem = parseStatementOrDeclaration(item, raiseVars);
-    if (type === 'FunctionDeclaration') {
-      // 函数声明需要前置
-      resolvedModule.unshift(resolvedItem);
-    } else {
-      resolvedModule.push(resolvedItem);
-    }
-  });
+    .filter(({ type }) => !ignoreTypes.includes(type))
+    .forEach(item => {
+      const { type } = item;
+      const resolvedItem = parseStatementOrDeclaration(item, raiseVars);
+      if (type === 'FunctionDeclaration') {
+        // 函数声明需要前置
+        resolvedModule.unshift(resolvedItem);
+      } else {
+        resolvedModule.push(resolvedItem);
+      }
+    });
   addRaiseVars(raiseVars, raiseVarStackTail);
   if (scopeBlock) { // 作用域块（这里专指函数的作用域）
     // var 声明上升
@@ -582,7 +582,7 @@ const parseForInStatement = ({ left, right, body }, raiseVars) => {
       leftDsl = parseMemberExpression(left);
       break;
     case 'VariableDeclaration':
-      leftDsl = parseVariableDeclaration(left);
+      leftDsl = parseVariableDeclaration(left, raiseVars);
       break;
     default:
       throw new Error(`未知的 for...in 初始化类型：${left.type}`);
